@@ -16,7 +16,7 @@ library(grid)
 
 ## Overview
 **Data Source:** [https://www.kaggle.com/ashaheedq/video-games-sales-2019](https://www.kaggle.com/ashaheedq/video-games-sales-2019)  
-We're going to analyze video game data from .
+We're going to analyze video game data from kaggle, which outlines game genre types, sales numbers, critic and user ratings, and more.
 
 Note:  there are some games that users did not rate potentially because those games aren't for commercial use (e.g. genre 'education').  We're going to remove these games from our analysis.
 
