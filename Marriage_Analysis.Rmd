@@ -1,0 +1,136 @@
+---
+title: "Project 2 - Marriage Data Analysis"
+author: "Devin Teran"
+date: "3/6/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(stringr)
+library(kableExtra)
+library(ggplot2)
+library(gridExtra)
+library(grid)
+```
+
+## Overview
+**Data Source:** [https://data.world/siyeh/state-marriage-rate](https://data.world/siyeh/state-marriage-rate)  
+This dataset includes data about the number of marriages per 1,000 total population from 1990 to 2016.  The data is broken apart into census regions, census division, and state.
+
+## Cleaning the Data
+**Importing the data**
+This data is being loaded into a dataframe from a csv stored on GitHub.
+```{r load_data,warning = FALSE}
+url_path <- "https://raw.githubusercontent.com/devinteran/Data607-Project2/master/marriage_data%20-%20Sheet1.csv"
+marriage_data_raw <- read_csv(url_path)
+marriage_data <- marriage_data_raw
+```
+  
+Let's view the first 10 columns of the data:
+```{r marriage_data-visualation-1}
+kable(head(marriage_data[,1:10])) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+We need to pivot the data into a longer format so that each row contains one observation for a single year.
+```{r pivot_data_long}
+marriage_data_long <- marriage_data %>% pivot_longer(col=starts_with(c("20","19")),names_to="Year",values_to='count')
+```
+
+
+The resulting data look clean.  We're ready to begin our analysis:
+```{r marriage_data-visualation-2}
+kable(head(marriage_data_long)) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+## Data Exploration
+First, what census region and census divisions do we have in our data?
+```{r marriage_by_census_division}
+region_plus_division <- arrange(unique(select(drop_na(marriage_data_long),census_region,census_division)),census_region,census_division)
+kable(region_plus_division) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+region_division_data <- select(drop_na(marriage_data_long),census_region,census_division,Year,count)
+region <-  group_by(marriage_data_long,census_region,Year)
+region_marriages <- summarize(drop_na(region),Marriages = sum(count))
+```
+  
+# How have has the number of marriages trended regionally over the past 35 years?
+* There has been a slight decrease in marriages across all regions 
+* The largest decrease in marriages is happening the West, let's dive further into this region
+```{r regional-plots,messages = FALSE,warning=FALSE}
+#Separate out for easier y-axis limits
+mw_ne <- filter(region_marriages,census_region %in% c('Midwest','Northeast'))
+s_w <- filter(region_marriages,census_region %in% c('South','West'))
+
+g1 <- ggplot(mw_ne,aes(fill=census_region,x = Year,y = Marriages)) +
+  geom_bar(position="dodge",stat = "identity") +
+  facet_wrap(~census_region) + 
+  theme(axis.text.x = element_text(angle = 90)) +
+  ylab("Count Marriages") 
+  scale_fill_manual(values= c("#999999", "#E69F00"))
+g2 <- ggplot(s_w,aes(fill=census_region,x = Year,y = Marriages)) +
+  geom_bar(position="dodge",stat = "identity") +
+  facet_wrap(~census_region) + 
+  theme(axis.text.x = element_text(angle = 90)) +
+  ylab("Count Marriages") 
+
+grid.arrange(g1,g2,top="Marriages Per 1,000 Population")
+ 
+```
+#Marriages in the West  
+Here we've separated out states into four separate graphs in alphabetical order.  This was only done in order to see the data more easily.   
+* Hawaii,Nevada,Utah,Washington,Wyoming have had the largest decrease in marriages  
+* The number of marraiges in Oregon and New Mexico have been very consistent over the years  
+* Hawaii had a strange increase in marriages, peaking in 2004, then dropping pretty consistently in years since  
+```{r census_division_plots}
+west_marriage_a_c <- select(filter(drop_na(marriage_data_long),census_region == "West",Year > 1998,state %in% c("Alaska","Arizona","California","Colorado")),census_region,state,Year,count)
+west_marriage_d_m <- select(filter(drop_na(marriage_data_long),census_region == "West",Year > 1998,state %in% c("Hawaii","Idaho","Montana")),census_region,state,Year,count)
+west_marriage_n_o <- select(filter(drop_na(marriage_data_long),census_region == "West",Year > 1998,state %in% c("Nevada","New Mexico","Oregon")),census_region,state,Year,count)
+west_marriage_p_z <- select(filter(drop_na(marriage_data_long),census_region == "West",Year > 1998,state %in% c("Utah","Washington","Wyoming")),census_region,state,Year,count)
+#States A-C
+a <- ggplot(west_marriage_a_c, aes(fill=state,x=Year,y=count,group=state,colour=state)) +
+  geom_line(linetype = "dashed")+
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 90))
+#States D-M
+b <- ggplot(west_marriage_d_m, aes(fill=state,x=Year,y=count,group=state,colour=state)) +
+  geom_line(linetype = "dashed")+
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 90))
+#States N-O
+c <- ggplot(west_marriage_n_o, aes(fill=state,x=Year,y=count,group=state,colour=state)) +
+  geom_line(linetype = "dashed")+
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 90))
+#States P-Z
+d <- ggplot(west_marriage_p_z, aes(fill=state,x=Year,y=count,group=state,colour=state)) +
+  geom_line(linetype = "dashed")+
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 90))
+
+grid.arrange(a,b,c,d,nrow=2,top = "Marriages Per 1000 Per State - West Region")
+
+```
+
+# States that appear to have dropped
+* Here it's clear the state having the biggest overaly impact and decrease in marriages is Nevada
+* If we had more granular data including city data, we could inspect if this difference has anything to do with Las Vegasß
+```{r drastic-drop-states}
+drop_marriages <- select(filter(drop_na(marriage_data_long),census_region == "West",Year > 1998,state %in% c("Hawaii","Nevada","Utah","Washington","Wyoming")),census_region,state,Year,count)
+
+ggplot(drop_marriages, aes(fill=state,x=Year,y=count,group=state,colour=state)) +
+  geom_line(linetype = "dashed")+
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  ggtitle("Marriages Per 1000") + 
+  theme(plot.title = element_text(hjust = 0.5))
+```
+  
+# Conclusion
+Overall, the marriage rate in the United States has dropped most significantly in Nevada in the West from 1990 to 2016.  If we have additional information it would be interesting to investigate if this trend has any correlation with Las Vegas since many people go to Las Vegas on a whim to get married.  Maybe certain laws were put into place that prevented travelers from getting married there.  Perhaps, this trend has nothing to do with Las Vegas at all.  City data would help us determine that.
+
+It would also be interesting to include additional analysis to see which states had the highest increase in marriage rates from 1990 to 2016.
