@@ -1,0 +1,109 @@
+---
+title: "Project 2 - Video Game Analysis"
+author: "Devin Teran"
+date: "3/6/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(grid)
+```
+
+## Overview
+**Data Source:** [https://www.kaggle.com/ashaheedq/video-games-sales-2019](https://www.kaggle.com/ashaheedq/video-games-sales-2019)  
+We're going to analyze video game data from .
+
+Note:  there are some games that users did not rate potentially because those games aren't for commercial use (e.g. genre 'education').  We're going to remove these games from our analysis.
+
+## Clean Data
+1. Import data from csv stored on GitHub
+2. Subset data to include only columns we want to analyze
+3. To narrow our analysis, we'll remove games that do not have both a critic and user score and global sale value
+```{r load_data}
+file_path <- "https://raw.githubusercontent.com/devinteran/Data607-Project2/master/vgsales-12-4-2019.csv"
+video_game_raw <- read_csv(file_path)
+
+#select subset of columns
+video_game <- select(video_game_raw,Rank,basename,Genre,ESRB_Rating,Platform,Publisher,Critic_Score,User_Score,Total_Shipped,Global_Sales,NA_Sales,PAL_Sales,JP_Sales,Other_Sales,Year)
+
+#Remove games where we are missing a critic score or user score
+video_game <- filter(video_game,is.na(User_Score) == FALSE,is.na(Critic_Score) == FALSE,is.na(Global_Sales) == FALSE)
+```
+
+## Questions to Answer
+* Which genre has the highest rating games by critics? by users?
+* Do these high rating genres have the most global sales?
+* Generally, do critics or user ratings reflect global game sales?
+
+## Which genre has the highest ratings by critics and users?
+* Here we can see that users are more generous when rating games.  Their ratings are always higher than critics for the same category.
+* The genres Simulation, Racing and Strategy were the highest user and critic rated categories
+
+Next let's look if sales correlate with critic or users findings..
+```{r publisher-scores}
+genre_score<- video_game %>% group_by(Genre) %>% summarize(Critic_Score = mean(Critic_Score,na.rm=TRUE),User_Score = mean(User_Score,na.rm=TRUE))
+genre_score <- pivot_longer(genre_score,cols=ends_with("Score"),names_to="Type",values_to="Score")                
+
+ggplot(genre_score,aes(fill=Type,reorder(x=Genre,-Score),y=Score)) + 
+  geom_bar(position="dodge",stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  xlab("Genre") + 
+  ggtitle("Average Score for Video Games by Genre") + 
+  theme(plot.title = element_text(hjust = 0.5))
+```
+  
+Here we see the highest selling game genres globally are Racing, Action & Shooter.  
+* Racing games are both highly rated and high sellers  
+```{r video_game_sales}
+game_sales <- video_game %>% group_by(Genre) %>% summarize(Global_Sales = mean(Global_Sales,na.rm=TRUE))
+filter(video_game,Genre == 'Action')
+ggplot(drop_na(game_sales),aes(reorder(x=Genre,-Global_Sales),y=Global_Sales)) + 
+  geom_bar(position="dodge",stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  xlab("Genre") + 
+  ggtitle("Average Sales (in millions) for Video Games by Genre") + 
+  theme(plot.title = element_text(hjust = 0.5))
+```
+  
+# Do Critic or User Ratings Predict Global Sales Better? 
+- Both critics and users rated Simulation games very highly and sales were almost 0.
+- Critics and users rated Racing & Shooter games very high and these games sold a high volume of games
+- Users did not rate Action games very high relative to other genres despite high sales
+```{r sales-vs-scores}
+genre_score<- video_game %>% group_by(Genre) %>% summarize(Critic_Score = mean(Critic_Score,na.rm=TRUE),User_Score = mean(User_Score,na.rm=TRUE))
+genre_score <- pivot_longer(genre_score,cols=ends_with("Score"),names_to="Type",values_to="Score")                
+game_sales <- video_game %>% group_by(Genre) %>% summarize(Global_Sales = mean(Global_Sales,na.rm=TRUE))
+
+sales_plus_scores <- genre_score %>% merge(game_sales,by="Genre")
+sales_plus_scores_critic <- filter(drop_na(sales_plus_scores),Type == 'Critic_Score')
+sales_plus_scores_user <- filter(drop_na(sales_plus_scores),Type == 'User_Score')
+
+critic <- ggplot(sales_plus_scores_critic,aes(fill=Genre,x=Score,y=Global_Sales,color=Genre)) +
+  geom_point(size=3) +
+  xlab("Critic Score") +
+  ylab("Game Sales") +
+  ggtitle("Critic Ratings vs. Game Sales (in millions)") +
+  guides(fill=guide_legend(ncol=3)) +
+  geom_jitter() 
+
+user <- ggplot(sales_plus_scores_user,aes(fill=Genre,x=Score,y=Global_Sales,color=Genre)) +
+  geom_point(size=3) +
+  xlab("User Score") +
+  ylab("Game Sales") +
+  ggtitle("User Ratings vs. Game Sales (in millions)") + 
+  guides(fill=guide_legend(ncol=3)) +
+  geom_jitter() 
+grid.arrange(critic,user)
+
+```
+
+# Conclusions
+* Overall, users give games higher ratings than critics.   
+* Racing, Action and Shooter games are the best selling game genres.  
+* It's very hard to tell whether users or critics ratings were more predictive of global sales.  With more time and experience, I would like to use a more sophisticated model to predict which metric better predicts global sales.
+* It would also be interesting to see the popularity of games in different regions using regional sales.  
