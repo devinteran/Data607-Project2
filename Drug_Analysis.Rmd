@@ -1,0 +1,237 @@
+---
+title: "Project 2 - Drug Use Analysis"
+author: "Devin Teran"
+date: "3/5/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyr)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+#install.packages("cowplot")
+library(cowplot)
+library(gridExtra)
+library(grid)
+library(kableExtra)
+```
+
+## Overview
+**Data Source:** [https://www.drugabuse.gov/national-survey-drug-use-health](https://www.drugabuse.gov/national-survey-drug-use-health)  
+This dataset includes survey data from the National Institute on Drug Abuse.  The results show which age groups have used drugs over the past month, past year, and over their lifetime.  The age groups include 'Ages 12 and Older','Ages 12 to 17', 'Ages 18 to 25' and finally 'Ages 26 and Older'.  
+
+    
+## Cleaning Data
+This data has been stored in a csv in GitHub and will be pulled in directly.  
+
+**Steps to Import Data:**  
+1. We want all columns to be data type number with the exception of **Drug** & **Time Period**, which should be characters.  
+2. Column names will be renamed for cleaning purposes.  
+```{r load_data,warning=FALSE}
+url_path <- "https://raw.githubusercontent.com/devinteran/Data607-Project2/master/NationalSurveyOfDrugUseAndHealth%20-%20Sheet1.csv"
+drug_use_data_raw <- read_csv(url_path,col_types = cols(.default = col_number(),Drug=col_character(),'Time Period'=col_character()))
+drug_use_data <- drug_use_data_raw
+colnames(drug_use_data) <- c("Drug","Time Period","Ages 12 or Older_2016","Ages 12 or Older_2017","Ages 12 or Older_2018","Ages 12 to 17_2016","Ages 12 to 17_2017","Ages 12 to 17_2018","Ages 18 to 25_2016","Ages 18 to 25_2017","Ages 18 to 25_2018","Ages 26 or Older_2016","Ages 26 or Older_2017","Ages 26 or Older_2018")
+
+```
+**Steps to Clean Data:**  
+Here's a snapshot of what the first 5 columns of our data currently looks like and the steps we will take to clean the data:  
+
+1. Add **Drug** name where current data shows **NA** - In the column **Drug**, the drug name is only written once for each **Time Period**.  We're going to add the drug name to the second, third row where it is currently **NA**.  
+2. Remove first row since the column names include **Year** already  
+3. Pivot data to a longer format, so each row has a single **Time Period**, **Age**, **Year** and **% Total Survey Responders Used Drugs**
+```{r data_visual-1,echo=FALSE}
+kable(head(drug_use_data[,1:5])) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+```{r clean_data_add_missing_drug_row}
+drug_use_data$Drug[3:4]   <- drug_use_data$Drug[2]
+drug_use_data$Drug[6:7]   <- drug_use_data$Drug[5]
+drug_use_data$Drug[9:10]  <- drug_use_data$Drug[8]
+drug_use_data$Drug[12:13] <- drug_use_data$Drug[11]
+drug_use_data$Drug[15:16] <- drug_use_data$Drug[14]
+drug_use_data$Drug[18:19] <- drug_use_data$Drug[17]
+drug_use_data$Drug[21:22] <- drug_use_data$Drug[20]
+drug_use_data$Drug[24:25] <- drug_use_data$Drug[23]
+drug_use_data$Drug[27:28] <- drug_use_data$Drug[26]
+drug_use_data$Drug[30:31] <- drug_use_data$Drug[29]
+drug_use_data$Drug[33:34] <- drug_use_data$Drug[32]
+drug_use_data$Drug[36:37] <- drug_use_data$Drug[35]
+drug_use_data$Drug[39:40] <- drug_use_data$Drug[38]
+drug_use_data$Drug[42:43] <- drug_use_data$Drug[41]
+drug_use_data$Drug[45:46] <- drug_use_data$Drug[44]
+drug_use_data$Drug[48:49] <- drug_use_data$Drug[47]
+drug_use_data$Drug[51:52] <- drug_use_data$Drug[50]
+drug_use_data$Drug[54:55] <- drug_use_data$Drug[53]
+drug_use_data$Drug[57:58] <- drug_use_data$Drug[56]
+
+#Remove first row since not needed anymore
+drug_use_data <- drug_use_data[-1,]
+
+```
+
+```{r pivot_data_long}
+drug_use_data_long <- drug_use_data %>% pivot_longer(cols=starts_with("Ages"),names_to = c("Age","Year"),names_sep = "_",values_to = "% Total Survey Responders Used Drugs")
+
+#Remove age group 'Ages 12 or Older' since that would encompass all groups
+drug_use_data_long <- drug_use_data_long[drug_use_data_long$Age != "Ages 12 or Older",]
+```
+  
+    
+      
+Things are looking cleaner now..
+```{r data_visual-2,echo=FALSE}
+kable(head(drug_use_data_long)) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+## Analyzing the Data 
+**Questions to Ask**  
+* Which drugs are children age 12-17 exposed to over their lifetime?  
+* Which drugs have kids age 12-17 used most in past month?   
+* Are there any drugs that kids tend to use more than adults?  
+
+## Drug Use in Kids 
+Let's start by filtering the data to only include the youngest age group - kids ages 12 to 17.  
+```{r what-drugs-what-ages-what-years}
+kids <- filter(drug_use_data_long,Age == 'Ages 12 to 17')
+```
+
+**Which drugs are children age 12-17 exposed to over their lifetime?**  
+The most commonly used drugs by kids is alcohol (~25%) followed by illicit drugs (~24%) then marijuana (15%).  This makes sense as these drugs would be much easier to obtain.  Children may even have access to these drugs at home. 
+
+Since these drugs have been used over their lifetime, the drug may have been used once or on a regular basis.  Let's see which drugs kids have said to have used in past year.
+```{r 12-17-drug-use-lifetime,warning=FALSE}
+lifetime <- filter(drop_na(kids),`Time Period` == 'Lifetime')
+
+ggplot(lifetime,aes(fill=Year,x=reorder(Drug,`% Total Survey Responders Used Drugs`),y=`% Total Survey Responders Used Drugs`)) +
+  geom_bar(position="dodge",stat = "identity") +
+  coord_flip() +
+  ggtitle("Percent Drugs Used in Lifetime - Ages 12 to 17") +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  xlab("Drug")
+```
+  
+**Which drugs have been used by the most kids in the past year?**  
+The pattern of the top 3 most used drugs when comparing lifetime vs. past year holds.  It's clear that alcohol is the most common drug that kids have used in the past year, followed by illicit drugs, then marijuana.  The percentages have decreased (e.g. alcohol use decreased from ~25% to ~21%).
+
+The next logical question is, What about drug use in the past month?  This may indicate kids who are more frequent users.
+```{r 12-17-drug-use-past-year}
+pastYear <- filter(kids,`Time Period` == 'Past Year')
+ggplot(pastYear,aes(fill=Year,x=reorder(Drug,`% Total Survey Responders Used Drugs`),y=`% Total Survey Responders Used Drugs`)) +
+  geom_bar(position="dodge",stat = "identity") +
+  ggtitle("Percent Drugs Used in Past Year - Ages 12 to 17") +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  coord_flip() +
+  xlab("Drug")
+```
+  
+**Does this pattern match drug use from kids age 12-17 in the past month?**
+While the same top 3 drugs are said to have been used in the past month (alcohol, illicit durgs, and marijuana), it's interesting to see that the percentage of kids that used these drugs in the past month is far lower.  This suggests infrequent drug use by 12-17 year olds.
+```{r 12-17-drug-use-past-month}
+pastMonth <- filter(drop_na(kids),`Time Period` == 'Past Month')
+ggplot(pastMonth,aes(fill=Year,x=reorder(Drug,`% Total Survey Responders Used Drugs`),y=`% Total Survey Responders Used Drugs`)) +
+  geom_bar(position="dodge",stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  xlab("Drug") +
+  ylab("% Total Used Drug") +
+  ggtitle("Percent Drugs Used in Past Month - Ages 12 to 17") +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  coord_flip()
+```
+  
+**Let's compare usage of the top drugs over the past year versus past month using 2018 data.**  
+This tells us that far more kids have tried these top drugs but do no use them on a regular basis.  It would be interesting to ask if the drug has been used in the past week or daily to really determine if these survey responders are using the drugs on a regular basis.
+```{r kids-drug-use-year-vs-month}
+kids_2018_all_drugs <- filter(drop_na(kids),`Time Period` %in% c('Past Year','Past Month'),Year == '2018')
+top_drugs <- unique(select(filter(kids_2018_all_drugs,`% Total Survey Responders Used Drugs`>5),Drug))
+kids_2018_top_drugs <- filter(kids_2018_all_drugs,Drug %in% c('Alcohol','Cigarettes (any use)','Illicit Drugs','Marijuana/ Hashish'))
+ggplot(kids_2018_top_drugs,aes(fill=`Time Period`,x=reorder(Drug,-`% Total Survey Responders Used Drugs`),y=`% Total Survey Responders Used Drugs`)) +
+  geom_bar(position="dodge",stat = "identity") + 
+  theme(axis.text.x = element_text(angle = 45)) +
+  xlab("Drug") +
+  ylab("% Total Used Drug") +
+  ggtitle("Percent Drugs Used - Ages 12 to 17") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+  
+## How does drug use in 12-17 year olds compare to older survey respondents?  
+* It appears that there's a spike in drug in the age group 18-25, which makes sense.  This could be because 18 is the typical age when students enter college or leave home to live on their own.  
+* People may start drinking around 21 because it's the legal drinking age.  
+* It would be interesting to ask survey responders, if they use drugs together and if yes, which ones.
+
+```{r drug-use-all-ages-2018-past-year}
+drug_use_2018 <- filter(drug_use_data_long,Year == '2018',`Time Period` == 'Past Year')
+ggplot(drug_use_2018,aes(fill=Age,x=reorder(Drug,`% Total Survey Responders Used Drugs`),y=`% Total Survey Responders Used Drugs`)) +
+  geom_bar(position="dodge",stat = "identity") +
+  coord_flip() +
+  ggtitle("2018 Drug Use Across All Ages - Over Past Year") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  xlab("Drug") + 
+  ylab("% of Total Drug Use")
+```
+  
+## Once people start using drugs, do they continue use as they get older?
+This analysis is using the assumption that the age group 26 and older will behave similarly as the age group 18-25 when they are the same age.  This is likely a flawed assumption since generations behave differently, but for analysis sakes let's continue.  
+  \newline
+Our observations include that as individuals age:  
+* Alcohol use stays the same and may even increases a little
+* Cigarette use decreases a little
+* Illicit Drugs, Marijuana, Smokeless Tobacco use decrease
+```{r continued-drug-use}
+drugs_older <- filter(drop_na(drug_use_data_long),Year == '2018',`Time Period` == 'Past Month',Age %in% c('Ages 18 to 25','Ages 26 or Older'))
+ggplot(drugs_older,aes(fill=Age,x=reorder(Drug,`% Total Survey Responders Used Drugs`),y=`% Total Survey Responders Used Drugs`)) +
+  geom_bar(position="dodge",stat = "identity") +
+  coord_flip() +
+  xlab("Drug") +
+  ylab("% Drug Use") +
+  ggtitle("% Drug Use in Past Month in Older Age Groups - 2018 Data") + 
+  theme(plot.title = element_text(hjust = 0.5))
+```
+  
+# Let's Analyze Less Used Frequently used Drugs
+* Most of the less frequnetly used drugs would be considered more dangerous drugs (e.g. Crack Cocaine, Heroin, etc.)  
+* The graph supports the idea that older age groups have tried more drugs in their lifetime but dont necessarily still use those drugs. 
+* The youngest age group, Age 12 to 17, have used little to none of these harder drugs in the past month, year or over their lifetime.
+```{r less_frequently_used_drugs}
+less_used_drugs <- unique(select(filter(drug_use_data_long,Year == '2018',`Time Period` == 'Past Year',`% Total Survey Responders Used Drugs` < 0.05),Drug))
+less_used_drugs_2018_past_year  <- filter(drop_na(drug_use_data_long),Year == '2018',`Time Period` == 'Past Year',Drug %in% c('Crack Cocaine','Heroin','PCP'))
+less_used_drugs_2018_past_month <- filter(drop_na(drug_use_data_long),Year == '2018',`Time Period` == 'Past Month',Drug %in% c('Crack Cocaine','Heroin','PCP'))
+less_used_drugs_2018_lifetime   <- filter(drop_na(drug_use_data_long),Year == '2018',`Time Period` == 'Lifetime',Drug %in% c('Crack Cocaine','Heroin','PCP'))
+year <- ggplot(less_used_drugs_2018_past_year,aes(fill=Age,x=reorder(Drug,`% Total Survey Responders Used Drugs`),y=`% Total Survey Responders Used Drugs`)) +
+  geom_bar(position="dodge",stat = "identity") +
+  coord_flip() + 
+  xlab("") + 
+  ylab("% of Total Used Drug") +
+  ggtitle("% of Drugs Used in Past Year - 2018 Data") + 
+  theme(plot.title = element_text(hjust = 0.5))
+month <- ggplot(less_used_drugs_2018_past_month,aes(fill=Age,x=reorder(Drug,`% Total Survey Responders Used Drugs`),y=`% Total Survey Responders Used Drugs`)) +
+  geom_bar(position="dodge",stat = "identity") +
+  coord_flip() +
+  xlab("") + 
+  ylab("% of Total Used Drug") +
+  ggtitle("% of Drugs Used in Past Month - 2018 Data") +
+  theme(plot.title = element_text(hjust = 0.5))
+lifetime <- ggplot(less_used_drugs_2018_lifetime,aes(fill=Age,x=reorder(Drug,`% Total Survey Responders Used Drugs`),y=`% Total Survey Responders Used Drugs`)) +
+  geom_bar(position="dodge",stat = "identity") +
+  coord_flip() + 
+  xlab("") + 
+  ylab("% of Total Used Drug") +
+  ggtitle("% of Drugs Used in Lifetime - 2018 Data") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+grid.arrange(year,month,lifetime)
+```
+  
+# Conclusion  
+* Alcohol, illicit drugs and marijuana are most used drugs. Kids ages 12-17 have tried these drugs but don’t use them as regularly.  
+* The age group 18-25 uses drugs the most.  It would be interesting to get additional data to determine whether or not this has any correlation to drug use in college or individuals changing their living situations from living with parents to living with peers or on their own for the first time.  
+* If we had additional survey info, we could analyze which drugs are used in combination with one another.  Also, how many responders use drugs daily or even weekly?  
+* Assuming generations behave similarly, we observed that drug use typically drops off at ages 26 and older with the exception of alcohol.   
+* The most dangerous drugs like crack cocaine are used the least.  These types of drugs have been tried the most by the oldest generation, ages 26 and older, over their lifetime but they don’t continue to consume these drugs.  
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
